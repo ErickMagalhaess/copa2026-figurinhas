@@ -11,6 +11,10 @@ export default function StickerManager({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("groups");
+  const [filter, setFilter] = useState("all");
+  const [friendList, setFriendList] = useState("");
+  const [tradeMode, setTradeMode] = useState("give");
+  const [viewMode, setViewMode] = useState("groups");
 
   useEffect(() => { if (!user) return; (async () => { try { const snap = await getDoc(doc(db,"collections",user.uid)); if(snap.exists()){setCollected(snap.data().collected||{});setDuplicates(snap.data().duplicates||{});} } catch(e){console.error(e);} setLoading(false); })(); }, [user]);
 
@@ -29,6 +33,9 @@ export default function StickerManager({ user, onLogout }) {
   const sr=isS?Object.entries(STICKER_LOOKUP).filter(([id,info])=>id.includes(q)||info.country.toUpperCase().includes(q)).map(([id,info])=>({id,...info})):[];
   const isSp=(n)=>n==="Página Inicial"||n==="Coca-Cola"||n==="FIFA History";
 
+  const allTeams=[];
+  Object.entries(GROUPS_DATA).forEach(([gn,teams])=>{Object.entries(teams).forEach(([key,team])=>{allTeams.push({key,team,group:gn});});});
+
   const getMissing=()=>{const g={};Object.entries(GROUPS_DATA).forEach(([gn,teams])=>{Object.entries(teams).forEach(([key,team])=>{getStickerIds(team).forEach(id=>{if(!collected[id]){if(!g[key])g[key]={country:team.country,group:gn,prefix:key,ids:[]};g[key].ids.push(id);}});});});return Object.values(g);};
   const getDupes=()=>Object.entries(duplicates).filter(([,v])=>v>0).map(([id,count])=>{const info=STICKER_LOOKUP[id]||{};return{id,count,country:info.country||"",prefix:info.prefix||""};});
 
@@ -37,6 +44,13 @@ export default function StickerManager({ user, onLogout }) {
     if(type==="missing"){text="⚽ FIGURINHAS FALTANTES - Copa 2026\n\n";getMissing().forEach(g=>{text+=FLAGS[g.prefix]+" "+g.country+": "+g.ids.join(", ")+"\n";});text+="\nTotal: "+missCount+" faltando";}
     else{text="🔁 FIGURINHAS REPETIDAS - Copa 2026\n\n";getDupes().forEach(d=>{text+=d.id+" (x"+d.count+") - "+d.country+"\n";});text+="\nTotal: "+dupeCount+" para troca";}
     if(navigator.share){navigator.share({title:"Figurinhas Copa 2026",text});}else{navigator.clipboard.writeText(text).then(()=>alert("Lista copiada!"));}
+  };
+
+  const parseFriendList=()=>{const codes=friendList.toUpperCase().match(/[A-Z]{2,4}\d{1,2}/g)||[];return codes.filter(c=>STICKER_LOOKUP[c]);};
+  const getTradeResults=()=>{
+    const codes=parseFriendList();if(!codes.length)return null;
+    if(tradeMode==="give"){const can=codes.filter(id=>duplicates[id]&&duplicates[id]>0);return{title:"Posso dar para o amigo",desc:"Figurinhas que seu amigo precisa e você tem repetida",items:can,color:"#4ade80",empty:"Você não tem nenhuma repetida que seu amigo precisa 😕"};}
+    else{const want=codes.filter(id=>!collected[id]);return{title:"Quero do amigo",desc:"Figurinhas que o amigo tem repetida e você precisa",items:want,color:"#60a5fa",empty:"Você já tem todas as figurinhas da lista do amigo 🎉"};}
   };
 
   if(loading)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0a0f1a",color:"#fff",fontFamily:"sans-serif"}}><p>Carregando coleção...</p></div>;
@@ -51,7 +65,22 @@ export default function StickerManager({ user, onLogout }) {
       </div>}
     </div>);};
 
-  const TB=({k,label,count})=><button onClick={()=>{setTab(k);setActiveGroup(null);}} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:600,border:tab===k?"1px solid #7c3aed":"1px solid transparent",background:tab===k?"rgba(124,58,237,0.3)":"rgba(255,255,255,0.04)",color:tab===k?"#c4b5fd":"#888",cursor:"pointer"}}>{label}{count!=null&&<span style={{marginLeft:4,opacity:0.7}}>({count})</span>}</button>;
+  const TB=({k,label,count})=><button onClick={()=>{setTab(k);setActiveGroup(null);setFilter("all");}} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:600,border:tab===k?"1px solid #7c3aed":"1px solid transparent",background:tab===k?"rgba(124,58,237,0.3)":"rgba(255,255,255,0.04)",color:tab===k?"#c4b5fd":"#888",cursor:"pointer"}}>{label}{count!=null&&<span style={{marginLeft:4,opacity:0.7}}>({count})</span>}</button>;
+  const FB=({k,label})=><button onClick={()=>setFilter(k)} style={{padding:"5px 10px",borderRadius:6,fontSize:11,fontWeight:600,border:"none",background:filter===k?"#7c3aed":"#222",color:filter===k?"#fff":"#888",cursor:"pointer"}}>{label}</button>;
+
+  const TeamCard=({tkey,team})=>{let ids=getStickerIds(team);const th=ids.filter(id=>collected[id]).length;
+    if(filter==="have")ids=ids.filter(id=>collected[id]);
+    if(filter==="miss")ids=ids.filter(id=>!collected[id]);
+    if(!ids.length)return null;
+    return(<div style={{background:"#111",borderRadius:10,padding:12,marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+        <span style={{fontSize:20}}>{FLAGS[tkey]||"🏳️"}</span>
+        <b style={{color:"#fff"}}>{team.country}</b>
+        <span style={{fontSize:11,color:"#888"}}>{th}/{getStickerIds(team).length}</span>
+        {th===getStickerIds(team).length&&<span>🎉</span>}
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap"}}>{ids.map(id=>Chip(id))}</div>
+    </div>);};
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0f1a",fontFamily:"sans-serif",color:"#e8eaf0",paddingBottom:40,maxWidth:900,margin:"0 auto"}}>
@@ -81,41 +110,47 @@ export default function StickerManager({ user, onLogout }) {
           <TB k="groups" label="📋 Grupos" count={null}/>
           <TB k="missing" label="❌ Faltantes" count={missCount}/>
           <TB k="dupes" label="🔁 Repetidas" count={dupeCount}/>
+          <TB k="trade" label="🤝 Trocas" count={null}/>
         </div>
 
         {tab==="groups"&&!activeGroup&&(
-          <div style={{padding:"12px 16px",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
-            {Object.keys(GROUPS_DATA).map(gName=>{const teams=GROUPS_DATA[gName];let total=0,have=0;Object.values(teams).forEach(t=>{const ids=getStickerIds(t);total+=ids.length;ids.forEach(id=>{if(collected[id])have++;});});const pct=total?Math.round(have/total*100):0;return(
-              <div key={gName} onClick={()=>setActiveGroup(gName)} style={{background:pct===100?"#0a2a0a":"#111",border:pct===100?"1px solid #2a5a2a":"1px solid #222",borderRadius:10,padding:12,cursor:"pointer"}}>
-                <div style={{fontWeight:700,fontSize:isSp(gName)?13:18,color:pct===100?"#4ade80":"#fff"}}>{isSp(gName)?gName:"GRUPO "+gName}</div>
-                <div style={{fontSize:11,color:"#888",marginTop:4}}>{have}/{total} — {pct}%</div>
-                <div style={{height:3,background:"#222",borderRadius:2,marginTop:6}}><div style={{height:"100%",borderRadius:2,width:pct+"%",background:pct===100?"#22c55e":"#7c3aed"}}/></div>
-                <div style={{marginTop:6}}>{Object.entries(teams).map(([k])=><span key={k} style={{fontSize:14,marginRight:3}}>{FLAGS[k]||"🏳️"}</span>)}</div>
-              </div>);})}
+          <div style={{padding:"12px 16px"}}>
+            <div style={{display:"flex",gap:6,marginBottom:12}}>
+              <button onClick={()=>{setViewMode("groups");setFilter("all");}} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:viewMode==="groups"?"1px solid #7c3aed":"1px solid #333",background:viewMode==="groups"?"rgba(124,58,237,0.2)":"#111",color:viewMode==="groups"?"#c4b5fd":"#888"}}>Por grupo</button>
+              <button onClick={()=>{setViewMode("all");setFilter("all");}} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:viewMode==="all"?"1px solid #7c3aed":"1px solid #333",background:viewMode==="all"?"rgba(124,58,237,0.2)":"#111",color:viewMode==="all"?"#c4b5fd":"#888"}}>Todas as seleções</button>
+              {viewMode==="all"&&<><FB k="all" label="Todas"/><FB k="have" label="Tenho"/><FB k="miss" label="Faltam"/></>}
+            </div>
+            {viewMode==="groups"?(
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
+                {Object.keys(GROUPS_DATA).map(gName=>{const teams=GROUPS_DATA[gName];let total=0,have=0;Object.values(teams).forEach(t=>{const ids=getStickerIds(t);total+=ids.length;ids.forEach(id=>{if(collected[id])have++;});});const pct=total?Math.round(have/total*100):0;return(
+                  <div key={gName} onClick={()=>{setActiveGroup(gName);setFilter("all");}} style={{background:pct===100?"#0a2a0a":"#111",border:pct===100?"1px solid #2a5a2a":"1px solid #222",borderRadius:10,padding:12,cursor:"pointer"}}>
+                    <div style={{fontWeight:700,fontSize:isSp(gName)?13:18,color:pct===100?"#4ade80":"#fff"}}>{isSp(gName)?gName:"GRUPO "+gName}</div>
+                    <div style={{fontSize:11,color:"#888",marginTop:4}}>{have}/{total} — {pct}%</div>
+                    <div style={{height:3,background:"#222",borderRadius:2,marginTop:6}}><div style={{height:"100%",borderRadius:2,width:pct+"%",background:pct===100?"#22c55e":"#7c3aed"}}/></div>
+                    <div style={{marginTop:6}}>{Object.entries(teams).map(([k])=><span key={k} style={{fontSize:14,marginRight:3}}>{FLAGS[k]||"🏳️"}</span>)}</div>
+                  </div>);})}
+              </div>
+            ):(
+              <div>{allTeams.map(({key,team})=><TeamCard key={key} tkey={key} team={team}/>)}</div>
+            )}
           </div>
         )}
 
         {tab==="groups"&&activeGroup&&(
           <div style={{padding:"12px 16px"}}>
-            <button onClick={()=>setActiveGroup(null)} style={{background:"none",border:"none",color:"#a78bfa",cursor:"pointer",fontSize:14,fontWeight:600,marginBottom:12}}>← Voltar</button>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <button onClick={()=>setActiveGroup(null)} style={{background:"none",border:"none",color:"#a78bfa",cursor:"pointer",fontSize:14,fontWeight:600}}>← Voltar</button>
+              <div style={{display:"flex",gap:4}}><FB k="all" label="Todas"/><FB k="have" label="Tenho"/><FB k="miss" label="Faltam"/></div>
+            </div>
             <h2 style={{fontSize:20,fontWeight:700,color:"#fff",marginBottom:12}}>{isSp(activeGroup)?activeGroup:"GRUPO "+activeGroup}</h2>
-            {Object.entries(GROUPS_DATA[activeGroup]).map(([key,team])=>{const ids=getStickerIds(team);const th=ids.filter(id=>collected[id]).length;return(
-              <div key={key} style={{background:"#111",borderRadius:10,padding:12,marginBottom:10}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                  <span style={{fontSize:20}}>{FLAGS[key]||"🏳️"}</span>
-                  <b style={{color:"#fff"}}>{team.country}</b>
-                  <span style={{fontSize:11,color:"#888"}}>{th}/{ids.length}</span>
-                  {th===ids.length&&<span>🎉</span>}
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap"}}>{ids.map(id=>Chip(id))}</div>
-              </div>);})}
+            {Object.entries(GROUPS_DATA[activeGroup]).map(([key,team])=><TeamCard key={key} tkey={key} team={team}/>)}
           </div>
         )}
 
         {tab==="missing"&&(
           <div style={{padding:"12px 16px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <span style={{fontSize:13,color:"#f87171",fontWeight:600}}>{missCount} figurinhas faltando</span>
+              <span style={{fontSize:13,color:"#f87171",fontWeight:600}}>{missCount} faltando</span>
               {missCount>0&&<button onClick={()=>shareList("missing")} style={{background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.3)",color:"#60a5fa",padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}>📤 Compartilhar</button>}
             </div>
             {missCount===0?<div style={{textAlign:"center",padding:40}}><span style={{fontSize:48}}>🏆</span><p style={{color:"#4ade80",fontWeight:700,fontSize:20,marginTop:8}}>ÁLBUM COMPLETO!</p></div>
@@ -129,15 +164,14 @@ export default function StickerManager({ user, onLogout }) {
                 <div style={{display:"flex",flexWrap:"wrap"}}>{g.ids.map(id=>
                   <button key={id} onClick={()=>toggle(id)} style={{margin:3,minWidth:52,padding:"5px 4px",borderRadius:7,fontSize:11,fontWeight:700,background:"rgba(248,113,113,0.08)",color:"#f87171",border:"1px solid rgba(248,113,113,0.2)",cursor:"pointer"}}>{id}</button>
                 )}</div>
-              </div>
-            ))}
+              </div>))}
           </div>
         )}
 
         {tab==="dupes"&&(
           <div style={{padding:"12px 16px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <span style={{fontSize:13,color:"#fbbf24",fontWeight:600}}>{dupeCount} figurinha{dupeCount!==1?"s":""} para troca</span>
+              <span style={{fontSize:13,color:"#fbbf24",fontWeight:600}}>{dupeCount} para troca</span>
               {dupeCount>0&&<button onClick={()=>shareList("dupes")} style={{background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.3)",color:"#60a5fa",padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}>📤 Compartilhar</button>}
             </div>
             {dupeCount===0?<div style={{textAlign:"center",padding:40}}><span style={{fontSize:40}}>📭</span><p style={{color:"#888",marginTop:8}}>Nenhuma repetida ainda</p></div>
@@ -150,6 +184,32 @@ export default function StickerManager({ user, onLogout }) {
                   <button onClick={()=>addD(d.id)} style={{width:24,height:24,borderRadius:"50%",border:"none",background:"#1a3a1a",color:"#4ade80",cursor:"pointer",fontWeight:700}}>+</button>
                 </div>
               </div>))}</div>}
+          </div>
+        )}
+
+        {tab==="trade"&&(
+          <div style={{padding:"12px 16px"}}>
+            <div style={{display:"flex",gap:6,marginBottom:12}}>
+              <button onClick={()=>setTradeMode("give")} style={{flex:1,padding:"10px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",border:tradeMode==="give"?"1px solid #4ade80":"1px solid #333",background:tradeMode==="give"?"rgba(74,222,128,0.1)":"#111",color:tradeMode==="give"?"#4ade80":"#888"}}>🎁 Posso dar</button>
+              <button onClick={()=>setTradeMode("get")} style={{flex:1,padding:"10px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",border:tradeMode==="get"?"1px solid #60a5fa":"1px solid #333",background:tradeMode==="get"?"rgba(96,165,250,0.1)":"#111",color:tradeMode==="get"?"#60a5fa":"#888"}}>🙏 Quero pegar</button>
+            </div>
+            <p style={{fontSize:12,color:"#888",marginBottom:8}}>{tradeMode==="give"?"Cole a lista de FALTANTES do seu amigo:":"Cole a lista de REPETIDAS do seu amigo:"}</p>
+            <textarea value={friendList} onChange={e=>setFriendList(e.target.value)} placeholder={tradeMode==="give"?"Ex: BRA1, BRA5, ARG3, FRA10...":"Ex: MEX2, USA7, GER15, JPN4..."} style={{width:"100%",height:80,background:"#111",border:"1px solid #333",borderRadius:8,padding:10,color:"#eee",fontSize:13,fontFamily:"sans-serif",resize:"vertical"}}/>
+            {friendList.trim()&&(()=>{const r=getTradeResults();if(!r)return<p style={{fontSize:12,color:"#f66",marginTop:8}}>Nenhum código válido encontrado</p>;const found=r.items.length;const total=parseFriendList().length;return(
+              <div style={{marginTop:12}}>
+                <div style={{background:"#111",borderRadius:10,padding:14,marginBottom:10}}>
+                  <div style={{fontSize:14,fontWeight:700,color:r.color,marginBottom:2}}>{r.title}</div>
+                  <div style={{fontSize:11,color:"#888",marginBottom:8}}>{r.desc}</div>
+                  <div style={{fontSize:24,fontWeight:700,color:r.color}}>{found}<span style={{fontSize:13,color:"#888",fontWeight:400}}>/{total} figurinhas</span></div>
+                </div>
+                {found===0?<p style={{textAlign:"center",padding:20,color:"#888"}}>{r.empty}</p>
+                :<div style={{display:"flex",flexWrap:"wrap"}}>{r.items.map(id=>{const info=STICKER_LOOKUP[id]||{};return(
+                  <div key={id} style={{margin:3,padding:"6px 8px",borderRadius:8,background:tradeMode==="give"?"rgba(74,222,128,0.1)":"rgba(96,165,250,0.1)",border:tradeMode==="give"?"1px solid rgba(74,222,128,0.3)":"1px solid rgba(96,165,250,0.3)"}}>
+                    <span style={{fontSize:12,fontWeight:700,color:tradeMode==="give"?"#4ade80":"#60a5fa"}}>{id}</span>
+                    <span style={{fontSize:10,color:"#888",marginLeft:4}}>{info.country||""}</span>
+                    {tradeMode==="give"&&duplicates[id]&&<span style={{fontSize:10,color:"#fa0",marginLeft:4}}>x{duplicates[id]}</span>}
+                  </div>);})}</div>}
+              </div>);})()}
           </div>
         )}
       </>)}
