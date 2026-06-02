@@ -3,6 +3,10 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { GROUPS_DATA, getStickerIds, STICKER_LOOKUP, TOTAL_STICKERS, FLAGS } from "./data";
 
+const CMAP={};
+Object.values(STICKER_LOOKUP).forEach(i=>{CMAP[i.country.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")]=i.prefix;});
+CMAP["EUA"]="USA";CMAP["REPUBLICA TCHECA"]="CZE";CMAP["TCHEQUIA"]="CZE";CMAP["REP TCHECA"]="CZE";CMAP["INGLATERRA"]="ENG";CMAP["HOLANDA"]="NED";CMAP["PAISES BAIXOS"]="NED";CMAP["IRA"]="IRN";CMAP["COREIA"]="KOR";
+
 export default function StickerManager({ user, onLogout }) {
   const [collected, setCollected] = useState({});
   const [duplicates, setDuplicates] = useState({});
@@ -46,7 +50,19 @@ export default function StickerManager({ user, onLogout }) {
     if(navigator.share){navigator.share({title:"Figurinhas Copa 2026",text});}else{navigator.clipboard.writeText(text).then(()=>alert("Lista copiada!"));}
   };
 
-  const parseFriendList=()=>{const codes=friendList.toUpperCase().match(/[A-Z]{2,4}\d{1,2}/g)||[];return codes.filter(c=>STICKER_LOOKUP[c]);};
+  const parseFriendList=()=>{
+    const t=friendList.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    const codes=new Set();
+    const sorted=Object.keys(CMAP).sort((a,b)=>b.length-a.length);
+    t.split(/\n|;/).forEach(line=>{
+      let p=null,rest=line;
+      for(const c of sorted){if(line.includes(c)){p=CMAP[c];rest=line.slice(line.indexOf(c)+c.length);break;}}
+      if(p){const cleaned=rest.replace(/\([^)]*\)/g," ");const nums=cleaned.match(/\d+/g)||[];nums.forEach(n=>{const code=p+parseInt(n);if(STICKER_LOOKUP[code])codes.add(code);});}
+      else{const d=line.match(/[A-Z]{2,4}\d{1,2}/g)||[];d.forEach(c=>{if(STICKER_LOOKUP[c])codes.add(c);});}
+    });
+    return Array.from(codes);
+  };
+
   const getTradeResults=()=>{
     const codes=parseFriendList();if(!codes.length)return null;
     if(tradeMode==="give"){const can=codes.filter(id=>duplicates[id]&&duplicates[id]>0);return{title:"Posso dar para o amigo",desc:"Figurinhas que seu amigo precisa e você tem repetida",items:can,color:"#4ade80",empty:"Você não tem nenhuma repetida que seu amigo precisa 😕"};}
@@ -115,7 +131,7 @@ export default function StickerManager({ user, onLogout }) {
 
         {tab==="groups"&&!activeGroup&&(
           <div style={{padding:"12px 16px"}}>
-            <div style={{display:"flex",gap:6,marginBottom:12}}>
+            <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
               <button onClick={()=>{setViewMode("groups");setFilter("all");}} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:viewMode==="groups"?"1px solid #7c3aed":"1px solid #333",background:viewMode==="groups"?"rgba(124,58,237,0.2)":"#111",color:viewMode==="groups"?"#c4b5fd":"#888"}}>Por grupo</button>
               <button onClick={()=>{setViewMode("all");setFilter("all");}} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:viewMode==="all"?"1px solid #7c3aed":"1px solid #333",background:viewMode==="all"?"rgba(124,58,237,0.2)":"#111",color:viewMode==="all"?"#c4b5fd":"#888"}}>Todas as seleções</button>
               {viewMode==="all"&&<><FB k="all" label="Todas"/><FB k="have" label="Tenho"/><FB k="miss" label="Faltam"/></>}
@@ -193,8 +209,9 @@ export default function StickerManager({ user, onLogout }) {
               <button onClick={()=>setTradeMode("give")} style={{flex:1,padding:"10px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",border:tradeMode==="give"?"1px solid #4ade80":"1px solid #333",background:tradeMode==="give"?"rgba(74,222,128,0.1)":"#111",color:tradeMode==="give"?"#4ade80":"#888"}}>🎁 Posso dar</button>
               <button onClick={()=>setTradeMode("get")} style={{flex:1,padding:"10px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",border:tradeMode==="get"?"1px solid #60a5fa":"1px solid #333",background:tradeMode==="get"?"rgba(96,165,250,0.1)":"#111",color:tradeMode==="get"?"#60a5fa":"#888"}}>🙏 Quero pegar</button>
             </div>
-            <p style={{fontSize:12,color:"#888",marginBottom:8}}>{tradeMode==="give"?"Cole a lista de FALTANTES do seu amigo:":"Cole a lista de REPETIDAS do seu amigo:"}</p>
-            <textarea value={friendList} onChange={e=>setFriendList(e.target.value)} placeholder={tradeMode==="give"?"Ex: BRA1, BRA5, ARG3, FRA10...":"Ex: MEX2, USA7, GER15, JPN4..."} style={{width:"100%",height:80,background:"#111",border:"1px solid #333",borderRadius:8,padding:10,color:"#eee",fontSize:13,fontFamily:"sans-serif",resize:"vertical"}}/>
+            <p style={{fontSize:12,color:"#888",marginBottom:6}}>{tradeMode==="give"?"Cole a lista de FALTANTES do amigo:":"Cole a lista de REPETIDAS do amigo:"}</p>
+            <p style={{fontSize:10,color:"#666",marginBottom:8}}>Aceita formatos: "BRA1, BRA2" ou "BRASIL: 1, 2, 5" ou "BRASIL: 1(1x), 2(3x)"</p>
+            <textarea value={friendList} onChange={e=>setFriendList(e.target.value)} placeholder={"Ex:\nBRASIL: 1(1x), 5(2x), 12\nARGENTINA: 3, 7, 15\nFRANÇA: 2(1x), 8"} style={{width:"100%",height:100,background:"#111",border:"1px solid #333",borderRadius:8,padding:10,color:"#eee",fontSize:13,fontFamily:"sans-serif",resize:"vertical"}}/>
             {friendList.trim()&&(()=>{const r=getTradeResults();if(!r)return<p style={{fontSize:12,color:"#f66",marginTop:8}}>Nenhum código válido encontrado</p>;const found=r.items.length;const total=parseFriendList().length;return(
               <div style={{marginTop:12}}>
                 <div style={{background:"#111",borderRadius:10,padding:14,marginBottom:10}}>
