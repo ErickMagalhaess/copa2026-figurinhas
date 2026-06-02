@@ -6,6 +6,7 @@ import { GROUPS_DATA, getStickerIds, STICKER_LOOKUP, TOTAL_STICKERS, FLAGS } fro
 const CMAP={};
 Object.values(STICKER_LOOKUP).forEach(i=>{CMAP[i.country.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")]=i.prefix;});
 CMAP["EUA"]="USA";CMAP["REPUBLICA TCHECA"]="CZE";CMAP["TCHEQUIA"]="CZE";CMAP["REP TCHECA"]="CZE";CMAP["INGLATERRA"]="ENG";CMAP["HOLANDA"]="NED";CMAP["PAISES BAIXOS"]="NED";CMAP["IRA"]="IRN";CMAP["COREIA"]="KOR";
+const PFX=new Set();Object.values(STICKER_LOOKUP).forEach(i=>PFX.add(i.prefix));
 
 export default function StickerManager({ user, onLogout }) {
   const [collected, setCollected] = useState({});
@@ -56,7 +57,9 @@ export default function StickerManager({ user, onLogout }) {
     const sorted=Object.keys(CMAP).sort((a,b)=>b.length-a.length);
     t.split(/\n|;/).forEach(line=>{
       let p=null,rest=line;
-      for(const c of sorted){if(line.includes(c)){p=CMAP[c];rest=line.slice(line.indexOf(c)+c.length);break;}}
+      const pm=line.match(/\b([A-Z]{2,4})\s*:/);
+      if(pm&&PFX.has(pm[1])){p=pm[1];rest=line.slice(pm.index+pm[0].length);}
+      else{for(const c of sorted){if(line.includes(c)){p=CMAP[c];rest=line.slice(line.indexOf(c)+c.length);break;}}}
       if(p){const cleaned=rest.replace(/\([^)]*\)/g," ");const nums=cleaned.match(/\d+/g)||[];nums.forEach(n=>{const code=p+parseInt(n);if(STICKER_LOOKUP[code])codes.add(code);});}
       else{const d=line.match(/[A-Z]{2,4}\d{1,2}/g)||[];d.forEach(c=>{if(STICKER_LOOKUP[c])codes.add(c);});}
     });
@@ -210,8 +213,8 @@ export default function StickerManager({ user, onLogout }) {
               <button onClick={()=>setTradeMode("get")} style={{flex:1,padding:"10px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",border:tradeMode==="get"?"1px solid #60a5fa":"1px solid #333",background:tradeMode==="get"?"rgba(96,165,250,0.1)":"#111",color:tradeMode==="get"?"#60a5fa":"#888"}}>🙏 Quero pegar</button>
             </div>
             <p style={{fontSize:12,color:"#888",marginBottom:6}}>{tradeMode==="give"?"Cole a lista de FALTANTES do amigo:":"Cole a lista de REPETIDAS do amigo:"}</p>
-            <p style={{fontSize:10,color:"#666",marginBottom:8}}>Aceita formatos: "BRA1, BRA2" ou "BRASIL: 1, 2, 5" ou "BRASIL: 1(1x), 2(3x)"</p>
-            <textarea value={friendList} onChange={e=>setFriendList(e.target.value)} placeholder={"Ex:\nBRASIL: 1(1x), 5(2x), 12\nARGENTINA: 3, 7, 15\nFRANÇA: 2(1x), 8"} style={{width:"100%",height:100,background:"#111",border:"1px solid #333",borderRadius:8,padding:10,color:"#eee",fontSize:13,fontFamily:"sans-serif",resize:"vertical"}}/>
+            <p style={{fontSize:10,color:"#666",marginBottom:8}}>Aceita: "BRA1, BRA2" • "BRASIL: 1, 2" • "BRASIL: 1(1x), 2(3x)" • "BRA: 5(x1), 10(x2)"</p>
+            <textarea value={friendList} onChange={e=>setFriendList(e.target.value)} placeholder={"Ex:\nBRASIL: 1(1x), 5(2x)\nBRA: 12, 15(x1)\nARG: 3, 7(x2)"} style={{width:"100%",height:100,background:"#111",border:"1px solid #333",borderRadius:8,padding:10,color:"#eee",fontSize:13,fontFamily:"sans-serif",resize:"vertical"}}/>
             {friendList.trim()&&(()=>{const r=getTradeResults();if(!r)return<p style={{fontSize:12,color:"#f66",marginTop:8}}>Nenhum código válido encontrado</p>;const found=r.items.length;const total=parseFriendList().length;return(
               <div style={{marginTop:12}}>
                 <div style={{background:"#111",borderRadius:10,padding:14,marginBottom:10}}>
