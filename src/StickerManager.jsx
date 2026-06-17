@@ -20,6 +20,7 @@ export default function StickerManager({ user, onLogout }) {
   const [friendList, setFriendList] = useState("");
   const [tradeMode, setTradeMode] = useState("give");
   const [viewMode, setViewMode] = useState("groups");
+  const [showClearModal, setShowClearModal] = useState(false);
 
   useEffect(() => { if (!user) return; (async () => { try { const snap = await getDoc(doc(db,"collections",user.uid)); if(snap.exists()){setCollected(snap.data().collected||{});setDuplicates(snap.data().duplicates||{});} } catch(e){console.error(e);} setLoading(false); })(); }, [user]);
 
@@ -29,6 +30,7 @@ export default function StickerManager({ user, onLogout }) {
   const toggle=(id)=>{setCollected(p=>{const n={...p};if(n[id]){delete n[id];setDuplicates(dp=>{const nd={...dp};delete nd[id];save(n,nd);return nd;});}else{n[id]=true;save(n,duplicates);}return n;});};
   const addD=(id)=>{if(!collected[id])return;setDuplicates(p=>{const n={...p,[id]:(p[id]||0)+1};save(collected,n);return n;});};
   const remD=(id)=>{setDuplicates(p=>{const n={...p};if(n[id]>1)n[id]--;else delete n[id];save(collected,n);return n;});};
+  const confirmClearDupes=()=>{setDuplicates({});save(collected,{});setShowClearModal(false);};
 
   const haveCount=Object.keys(collected).length;
   const dupeCount=Object.values(duplicates).reduce((a,b)=>a+b,0);
@@ -189,9 +191,12 @@ export default function StickerManager({ user, onLogout }) {
 
         {tab==="dupes"&&(
           <div style={{padding:"12px 16px"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
               <span style={{fontSize:13,color:"#fbbf24",fontWeight:600}}>{dupeCount} para troca</span>
-              {dupeCount>0&&<button onClick={()=>shareList("dupes")} style={{background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.3)",color:"#60a5fa",padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}>📤 Compartilhar</button>}
+              <div style={{display:"flex",gap:6}}>
+                {dupeCount>0&&<button onClick={()=>setShowClearModal(true)} style={{background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.3)",color:"#f87171",padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}>🗑️ Limpar</button>}
+                {dupeCount>0&&<button onClick={()=>shareList("dupes")} style={{background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.3)",color:"#60a5fa",padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}>📤 Compartilhar</button>}
+              </div>
             </div>
             {dupeCount===0?<div style={{textAlign:"center",padding:40}}><span style={{fontSize:40}}>📭</span><p style={{color:"#888",marginTop:8}}>Nenhuma repetida ainda</p></div>
             :<div style={{display:"flex",flexWrap:"wrap",gap:8}}>{getDupes().map(d=>(
@@ -233,5 +238,21 @@ export default function StickerManager({ user, onLogout }) {
           </div>
         )}
       </>)}
+
+      {showClearModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20,backdropFilter:"blur(6px)"}} onClick={()=>setShowClearModal(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(135deg,#1a1147,#2d1068)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:16,padding:24,maxWidth:340,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
+            <div style={{textAlign:"center",marginBottom:18}}>
+              <div style={{fontSize:42,marginBottom:10}}>🗑️</div>
+              <h3 style={{fontSize:17,fontWeight:700,color:"#fff",marginBottom:8}}>Limpar todas as repetidas?</h3>
+              <p style={{fontSize:13,color:"#a8a8c8",lineHeight:1.4}}>As figurinhas marcadas como tendo serão mantidas. Esta ação não pode ser desfeita.</p>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setShowClearModal(false)} style={{flex:1,padding:"11px",borderRadius:10,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.05)",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"sans-serif"}}>Cancelar</button>
+              <button onClick={confirmClearDupes} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#dc2626",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"sans-serif"}}>Sim, limpar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>);
 }
