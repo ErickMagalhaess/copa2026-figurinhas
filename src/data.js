@@ -77,9 +77,6 @@ export const GROUPS_DATA = {
   "Coca-Cola": {
     CC: { prefix: "CC", country: "Coca-Cola", count: 14 },
   },
-  "FIFA History": {
-    FWC_H: { prefix: "FWC", country: "Fifa World Cup History", count: 20, historyRange: true },
-  },
 };
 
 export function getStickerIds(team) {
